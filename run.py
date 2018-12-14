@@ -7,8 +7,12 @@ import json
 updater = Updater(token=API_KEY)
 dispatcher = updater.dispatcher
 
+kb = [[KeyboardButton("/list"), KeyboardButton("/buy"), KeyboardButton("/balance"), KeyboardButton("/help")]]
+
+kb_markup = ReplyKeyboardMarkup(kb, resize_keyboard=True)
+
 def commandStart(bot, update): # Startup and help message
-    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!")
+    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!", reply_markup=kb_markup)
 
 def commandList(bot, update): # Display available drinks
     drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
@@ -18,13 +22,13 @@ def commandList(bot, update): # Display available drinks
     for drink in drink_list:
         output += "\n{}: _{}€_".format(drink['name'], drink['price'])
 
-    bot.sendMessage(chat_id=update.message.chat_id, text=output, parse_mode=ParseMode.MARKDOWN)
+    bot.sendMessage(chat_id=update.message.chat_id, text=output, parse_mode=ParseMode.MARKDOWN, reply_markup=kb_markup)
 
 def commandBuy(bot, update): # Display available drinks as buttons and charge user accordingly
-    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!")
+    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!", reply_markup=kb_markup)
 
 def commandBalance(bot, update): # Display current balance of user
-    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!")
+    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!", reply_markup=kb_markup)
 
 dispatcher.add_handler(CommandHandler('start', commandStart))
 dispatcher.add_handler(CommandHandler('help', commandStart))
