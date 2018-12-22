@@ -38,7 +38,17 @@ def commandBuy(bot, update): # Display available drinks as buttons and charge us
     bot.sendMessage(chat_id=update.message.chat_id, text="We are online!", reply_markup=kb_markup)
 
 def commandBalance(bot, update): # Display current balance of user
-    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!", reply_markup=kb_markup)
+    mete_id = getMeteID(update.message.chat_id)
+    if mete_id is None:
+        output = "You are not linked to a mete account!"
+    else:
+        mete_user_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/users.json").text)
+        for user in mete_user_list:
+            if user['id'] == mete_id:
+                balance = float(user['balance'])
+                break
+        output = "Your balance is _{:.2f}€_".format(balance)
+    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
 def request_link(bot, update): # Check request for account linking and act accordingly
     query = update.inline_query
@@ -114,6 +124,17 @@ def confirm_link(bot, update): # Confirm the linking of Telegram and Mete accoun
 
     bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
     bot.answer_callback_query(query.id, text=answer)
+
+def getMeteID(telegram_id):
+    database = sqlite3.connect("user_data")
+    cursor = database.cursor()
+
+    cursor.execute('''SELECT mete_id FROM users WHERE telegram_id=?''', (telegram_id,))
+    mete_id = cursor.fetchone()
+    if mete_id is None:
+        return None
+    else:
+        return mete_id[0]
 
 dispatcher.add_handler(CommandHandler('start', commandStart))
 dispatcher.add_handler(CommandHandler('help', commandStart))
