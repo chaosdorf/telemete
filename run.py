@@ -30,23 +30,33 @@ def commandList(bot, update): # Display available drinks
     output = "Available drinks:\n"
 
     for drink in drink_list:
-        output += "\n{}: _{}€_".format(drink['name'], drink['price'])
+        output += "\n{}: _{:.2f}€_".format(drink['name'], float(drink['price']))
 
     bot.sendMessage(chat_id=update.message.chat_id, text=output, parse_mode=ParseMode.MARKDOWN, reply_markup=kb_markup)
 
 def commandBuy(bot, update): # Display available drinks as buttons and charge user accordingly
-    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!", reply_markup=kb_markup)
+    mete_id = getMeteID(update.message.chat_id)
+    if mete_id is None:
+        output = "You are not linked to a mete account!"
+    else:
+        drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
+        kb_drinks = list()
+
+        output = "Please choose a drink from the list below:\n"
+
+        for drink in drink_list:
+            drink_details = "{}: {:.2f}€".format(drink['name'], float(drink['price']))
+            kb_drinks.append([InlineKeyboardButton(drink_details, callback_data="purchase/"+str(drink['id'])+'/'+drink['name']+'/'+str(mete_id))])
+        kb_drinks.append([InlineKeyboardButton("Cancel", callback_data="purchase/cancel")])
+        kb_drinks_markup = InlineKeyboardMarkup(kb_drinks)
+    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_drinks_markup)
 
 def commandBalance(bot, update): # Display current balance of user
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
     else:
-        mete_user_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/users.json").text)
-        for user in mete_user_list:
-            if user['id'] == mete_id:
-                balance = float(user['balance'])
-                break
+        balance = getBalance(mete_id)
         output = "Your balance is _{:.2f}€_".format(balance)
     bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
@@ -88,42 +98,53 @@ def request_link(bot, update): # Check request for account linking and act accor
     cursor.close()
 
     output = "Press 'Link accounts' to link your Telegram account to the Mete account *{}*_(id: {})_.".format(mete_name, mete_id)
-    kb_link = [[InlineKeyboardButton("Link accounts", callback_data="link/" + str(mete_id))], [InlineKeyboardButton("Cancel", callback_data="cancel/")]]
+    kb_link = [[InlineKeyboardButton("Link accounts", callback_data="link/" + str(mete_id))], [InlineKeyboardButton("Cancel", callback_data="link/cancel")]]
     kb_link_markup = InlineKeyboardMarkup(kb_link)
 
     results.append(InlineQueryResultArticle(id="0", title="Send link request", input_message_content=InputTextMessageContent(output, parse_mode=ParseMode.MARKDOWN), reply_markup=kb_link_markup))
 
     bot.answer_inline_query(query.id, results)
 
-def confirm_link(bot, update): # Confirm the linking of Telegram and Mete accounts
+def handle_buttonpress(bot, update): # Handle any inline buttonpresses related to this bot
     query = update.callback_query
-    print(query)
-    if query.data == "cancel":
-        output = "This request has been canceled."
-        answer = "Canceled!"
-    else:
-        data = query.data.split("/")
-        print("lel")
-        mete_id = int(data[1])
-        print(mete_id)
-        telegram_id = query.from_user.id
-
-        database = sqlite3.connect("user_data")
-        cursor = database.cursor()
-        cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (telegram_id,))
-        if not (cursor.fetchone() is None):
-            output = "*ERROR*: This user is already linked to Mete!"
-            answer = "Error!"
+    data = query.data.split("/")
+    if data[0] == "link": # Confirm the linking of Telegram and Mete accounts
+        if data[1] == "cancel":
+            output = "This request has been cancelled."
+            answer = "Cancelled!"
         else:
-            cursor.execute('''INSERT INTO users(telegram_id, mete_id) VALUES(?,?)''', (telegram_id, mete_id,))
-            output = "Successfully connected this user to Mete!"
-            answer = "Success!"
-            print("Linked {} to {}!".format(telegram_id, mete_id))
-    database.commit()
-    cursor.close()
+            mete_id = int(data[1])
+            telegram_id = query.from_user.id
 
-    bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
-    bot.answer_callback_query(query.id, text=answer)
+            database = sqlite3.connect("user_data")
+            cursor = database.cursor()
+            cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (telegram_id,))
+            if not (cursor.fetchone() is None):
+                output = "*ERROR*: This user is already linked to Mete!"
+                answer = "Error!"
+            else:
+                cursor.execute('''INSERT INTO users(telegram_id, mete_id) VALUES(?,?)''', (telegram_id, mete_id,))
+                output = "Successfully connected this user to Mete!"
+                answer = "Success!"
+        database.commit()
+        cursor.close()
+
+        bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
+        bot.answer_callback_query(query.id, text=answer)
+    elif data[0] == "purchase":
+        if data[1] == "cancel":
+            output = "This request has been cancelled."
+            answer = "Cancelled!"
+        else:
+            requests.get("http://{}/api/v1/users/{}/buy?drink={}".format(BASE_ADDRESS, data[3], data[1]))
+            balance = getBalance(int(data[3]))
+            print("lel")
+            output = "You purchased {}. Your new balance is _{:.2f}€_".format(data[2], balance)
+            answer = "Successfully purchased {}!".format(data[2])
+
+        bot.send_message(chat_id=query.from_user.id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+        bot.answer_callback_query(query.id, text=answer)
+
 
 def getMeteID(telegram_id):
     database = sqlite3.connect("user_data")
@@ -136,13 +157,21 @@ def getMeteID(telegram_id):
     else:
         return mete_id[0]
 
+def getBalance(mete_id):
+    mete_user_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/users.json").text)
+    for user in mete_user_list:
+        if user['id'] == mete_id:
+            balance = float(user['balance'])
+            break
+    return balance
+
 dispatcher.add_handler(CommandHandler('start', commandStart))
 dispatcher.add_handler(CommandHandler('help', commandStart))
 dispatcher.add_handler(CommandHandler('list', commandList))
 dispatcher.add_handler(CommandHandler('buy', commandBuy))
 dispatcher.add_handler(CommandHandler('balance', commandBalance))
 dispatcher.add_handler(InlineQueryHandler(request_link))
-dispatcher.add_handler(CallbackQueryHandler(confirm_link))
+dispatcher.add_handler(CallbackQueryHandler(handle_buttonpress))
 
 updater.start_polling()
 
