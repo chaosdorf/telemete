@@ -1,6 +1,7 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, InlineQueryHandler, CallbackQueryHandler
 from telegram import InlineQueryResultArticle, InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from valuables import API_KEY, BASE_ADDRESS, INIT_ADMIN
+from math import sqrt
 import requests
 import json
 import sqlite3
@@ -38,18 +39,22 @@ def commandBuy(bot, update): # Display available drinks as buttons and charge us
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
     else:
         drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
         kb_drinks = list()
 
         output = "Please choose a drink from the list below:\n"
-
-        for drink in drink_list:
-            drink_details = "{}: {:.2f}€".format(drink['name'], float(drink['price']))
-            kb_drinks.append([InlineKeyboardButton(drink_details, callback_data="purchase/"+str(drink['id'])+'/'+drink['name']+'/'+str(mete_id))])
-        kb_drinks.append([InlineKeyboardButton("Cancel", callback_data="purchase/cancel")])
-        kb_drinks_markup = InlineKeyboardMarkup(kb_drinks)
-    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_drinks_markup)
+        n = int(len(drink_list)/3) + 1
+        for i in range(n+1):
+            column_drinks = list()
+            for drink in drink_list[i*3:(i+1)*3]:
+                drink_details = "{}: {:.2f}€".format(drink['name'], float(drink['price']))
+                column_drinks.append(KeyboardButton(drink_details))
+            kb_drinks.append(column_drinks)
+        kb_drinks.append([KeyboardButton("/cancel")])
+        kb_drinks_markup = ReplyKeyboardMarkup(kb_drinks)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_drinks_markup)
 
 def commandBalance(bot, update): # Display current balance of user
     mete_id = getMeteID(update.message.chat_id)
@@ -59,6 +64,10 @@ def commandBalance(bot, update): # Display current balance of user
         balance = getBalance(mete_id)
         output = "Your balance is _{:.2f}€_".format(balance)
     bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+
+def commandCancel(bot, update):
+    output = "This request has been cancelled."
+    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
 
 def request_link(bot, update): # Check request for account linking and act accordingly
     query = update.inline_query
@@ -131,20 +140,32 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
 
         bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
         bot.answer_callback_query(query.id, text=answer)
-    elif data[0] == "purchase":
-        if data[1] == "cancel":
-            output = "This request has been cancelled."
-            answer = "Cancelled!"
-        else:
-            requests.get("http://{}/api/v1/users/{}/buy?drink={}".format(BASE_ADDRESS, data[3], data[1]))
-            balance = getBalance(int(data[3]))
-            print("lel")
-            output = "You purchased {}. Your new balance is _{:.2f}€_".format(data[2], balance)
-            answer = "Successfully purchased {}!".format(data[2])
 
-        bot.send_message(chat_id=query.from_user.id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
-        bot.answer_callback_query(query.id, text=answer)
+def handle_textinput(bot, update):
+    mete_id = getMeteID(update.message.chat_id)
+    if mete_id is None:
+        output = "You are not linked to a mete account!"
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+        return
+    input = update.message.text
+    splitup_input = input.split(":")
+    if len(splitup_input) == 2:
+        name, price = splitup_input[0], splitup_input[1][1:-1]
+        abort = True
+        drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
 
+        for drink in drink_list:
+            if name == drink['name'] and price == "{:.2f}".format(float(drink['price'])):
+                drink_id = drink['id']
+                abort = False
+                break
+        if not abort:
+            requests.get("http://{}/api/v1/users/{}/buy?drink={}".format(BASE_ADDRESS, mete_id, drink_id))
+            output = "You purchased _{}_. Your new balance is _{:.2f}€_".format(name, getBalance(mete_id))
+            bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+            return
+    output = "Your input confused me. Get some /help"
+    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
 def getMeteID(telegram_id):
     database = sqlite3.connect("user_data")
@@ -170,8 +191,10 @@ dispatcher.add_handler(CommandHandler('help', commandStart))
 dispatcher.add_handler(CommandHandler('list', commandList))
 dispatcher.add_handler(CommandHandler('buy', commandBuy))
 dispatcher.add_handler(CommandHandler('balance', commandBalance))
+dispatcher.add_handler(CommandHandler('cancel', commandCancel))
 dispatcher.add_handler(InlineQueryHandler(request_link))
 dispatcher.add_handler(CallbackQueryHandler(handle_buttonpress))
+dispatcher.add_handler(MessageHandler(Filters.text, handle_textinput))
 
 updater.start_polling()
 
