@@ -94,7 +94,7 @@ def commandCancel(bot, update):
         output = "This request has been cancelled."
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
 
-def request_link(bot, update): # Check request for account linking and act accordingly
+def handle_inlinerequest(bot, update): # Check request for account linking and act accordingly
     query = update.inline_query
     sender_id = query.from_user.id
     database = sqlite3.connect("user_data")
@@ -109,62 +109,95 @@ def request_link(bot, update): # Check request for account linking and act accor
     isAdmin = isAdmin[0]
 
     if not isAdmin:
-        print("{} requested a link, but the user isn't an admin".format(sender_id))
         return
 
     results = list()
-    mete_id = int(query.query)
-    mete_user_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/users.json").text)
+    input = query.query.split(" ")
+    if input[0] == "link":
+        mete_id = int(input[1])
+        mete_user_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/users.json").text)
 
-    valid_user = False
-    for user in mete_user_list:
-        if user['id'] == mete_id:
-            mete_name = user['name']
-            valid_user = True
-            break
-    if not valid_user:
-        return
+        valid_user = False
+        for user in mete_user_list:
+            if user['id'] == mete_id:
+                mete_name = user['name']
+                valid_user = True
+                break
+        if not valid_user:
+            return
 
-    cursor.execute('''SELECT id FROM users WHERE mete_id=?''', (mete_id,))
-    if not (cursor.fetchone() is None):
-        return
-    database.commit()
-    cursor.close()
+        cursor.execute('''SELECT id FROM users WHERE mete_id=?''', (mete_id,))
+        if not (cursor.fetchone() is None):
+            return
+        database.commit()
+        cursor.close()
 
-    output = "Press 'Link accounts' to link your Telegram account to the Mete account *{}*_(id: {})_.".format(mete_name, mete_id)
-    kb_link = [[InlineKeyboardButton("Link accounts", callback_data="link/" + str(mete_id))], [InlineKeyboardButton("Cancel", callback_data="link/cancel")]]
-    kb_link_markup = InlineKeyboardMarkup(kb_link)
+        output = "Press 'Link accounts' to link your Telegram account to the Mete account *{}*_(id: {})_.".format(mete_name, mete_id)
+        kb_link = [[InlineKeyboardButton("Link accounts", callback_data="link/" + str(mete_id))], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
+        kb_link_markup = InlineKeyboardMarkup(kb_link)
 
-    results.append(InlineQueryResultArticle(id="0", title="Send link request", input_message_content=InputTextMessageContent(output, parse_mode=ParseMode.MARKDOWN), reply_markup=kb_link_markup))
+        results.append(InlineQueryResultArticle(id="0", title="Send link request", input_message_content=InputTextMessageContent(output, parse_mode=ParseMode.MARKDOWN), reply_markup=kb_link_markup))
+    elif input[0] == "promote":
+        output = "Press 'Become administrator' to become a Chaosdorf-Mete administrator."
+        kb_admin_requests = [[InlineKeyboardButton("Become administrator", callback_data="promote")], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
+        kb_admin_requests_markup = InlineKeyboardMarkup(kb_admin_requests)
+        cursor.close()
 
+        results.append(InlineQueryResultArticle(id="0", title="Send promotion request", input_message_content=InputTextMessageContent(output), reply_markup=kb_admin_requests_markup))
     bot.answer_inline_query(query.id, results)
 
 def handle_buttonpress(bot, update): # Handle any inline buttonpresses related to this bot
     query = update.callback_query
     data = query.data.split("/")
     if data[0] == "link": # Confirm the linking of Telegram and Mete accounts
-        if data[1] == "cancel":
-            output = "This request has been cancelled."
-            answer = "Cancelled!"
-        else:
-            mete_id = int(data[1])
-            telegram_id = query.from_user.id
+        mete_id = int(data[1])
+        telegram_id = query.from_user.id
 
-            database = sqlite3.connect("user_data")
-            cursor = database.cursor()
-            cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (telegram_id,))
-            if not (cursor.fetchone() is None):
-                output = "*ERROR*: This user is already linked to Mete!"
-                answer = "Error!"
-            else:
-                cursor.execute('''INSERT INTO users(telegram_id, mete_id, user_handle) VALUES(?,?,?)''', (telegram_id, mete_id,"?",))
-                output = "Successfully connected this user to Mete!"
-                answer = "Success!"
+        database = sqlite3.connect("user_data")
+        cursor = database.cursor()
+        cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (telegram_id,))
+        if not (cursor.fetchone() is None):
+            output = "*ERROR*: This user is already linked to Mete!"
+            answer = "Error!"
+        else:
+            cursor.execute('''INSERT INTO users(telegram_id, mete_id, user_handle) VALUES(?,?,?)''', (telegram_id, mete_id,"?",))
+            output = "Successfully connected this user to Mete!"
+            answer = "Success!"
         database.commit()
         cursor.close()
+    elif data[0] == "promote":
+        a = 0
+        abort = False
+        user = query.from_user
+        telegram_id = user.id
+        mete_id = getMeteID(telegram_id)
+        if mete_id is None:
+            output = "*ERROR*: This user is not linked to Mete!"
+            answer = "Error!"
+        else:
+            database = sqlite3.connect("user_data")
+            cursor = database.cursor()
 
-        bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
-        bot.answer_callback_query(query.id, text=answer)
+            cursor.execute('''SELECT admin FROM users WHERE telegram_id=?''', (telegram_id,))
+            isAdmin = cursor.fetchone()[0]
+            if isAdmin:
+                output = "*ERROR*: This user is already an administrator!"
+                answer = "Error!"
+                abort = True
+            if not abort:
+                user_handle = user.username
+                cursor.execute('''UPDATE users SET admin=1 WHERE telegram_id=?''', (telegram_id,))
+                cursor.execute('''UPDATE users SET user_handle=? WHERE telegram_id=?''', (user_handle, telegram_id,))
+                database.commit()
+                cursor.close()
+
+                output = "Successfully promoted this user to administrator!"
+                output = "Success!"
+    elif data[0] == "cancel":
+        output = "This request has been cancelled."
+        answer = "Cancelled!"
+    bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
+    bot.answer_callback_query(query.id, text=answer)
 
 def handle_textinput(bot, update):
     mete_id = getMeteID(update.message.chat_id)
@@ -217,7 +250,7 @@ dispatcher.add_handler(CommandHandler('list', commandList))
 dispatcher.add_handler(CommandHandler('buy', commandBuy))
 dispatcher.add_handler(CommandHandler('balance', commandBalance))
 dispatcher.add_handler(CommandHandler('cancel', commandCancel))
-dispatcher.add_handler(InlineQueryHandler(request_link))
+dispatcher.add_handler(InlineQueryHandler(handle_inlinerequest))
 dispatcher.add_handler(CallbackQueryHandler(handle_buttonpress))
 dispatcher.add_handler(MessageHandler(Filters.text, handle_textinput))
 
