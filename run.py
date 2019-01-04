@@ -11,19 +11,38 @@ dispatcher = updater.dispatcher
 database = sqlite3.connect("user_data")
 cursor = database.cursor()
 
-cursor.execute('''CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, telegram_id INTEGER, mete_id INTEGER, admin INTEGER DEFAULT 0)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, telegram_id INTEGER, mete_id INTEGER, admin INTEGER DEFAULT 0, user_handle TEXT)''')
 cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (INIT_ADMIN['telegram_id'],))
 if cursor.fetchone() is None:
-    cursor.execute('''INSERT INTO users(telegram_id, mete_id, admin) VALUES(?,?,?)''', (INIT_ADMIN['telegram_id'], INIT_ADMIN['mete_id'], 1,))
+    cursor.execute('''INSERT INTO users(telegram_id, mete_id, admin, user_handle) VALUES(?,?,?,?)''', (INIT_ADMIN['telegram_id'], INIT_ADMIN['mete_id'], 1, INIT_ADMIN['user_handle'],))
 database.commit()
 cursor.close()
 
 kb = [[KeyboardButton("/list"), KeyboardButton("/buy"), KeyboardButton("/balance"), KeyboardButton("/help")]]
+kb_helponly = [[KeyboardButton("/help")]]
 
 kb_markup = ReplyKeyboardMarkup(kb, resize_keyboard=True)
+kb_helponly_markup = ReplyKeyboardMarkup(kb_helponly, resize_keyboard=True)
 
 def commandStart(bot, update): # Startup and help message
-    bot.sendMessage(chat_id=update.message.chat_id, text="We are online!", reply_markup=kb_markup)
+    mete_id = getMeteID(update.message.chat_id)
+    output = "Welcome to the Chaosdorf-Mete UI!\n"
+    if mete_id is None:
+        output += "You are currently not linked with a mete account. Please contact one of the administrators:\n"
+        database = sqlite3.connect("user_data")
+        cursor = database.cursor()
+        cursor.execute('''SELECT user_handle FROM users WHERE admin=1''')
+        admin_handles = cursor.fetchall()
+        for u in admin_handles:
+            output += "@{}\n".format(u[0])
+        output += "Please have your mete id at the ready to speed up the process."
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_helponly_markup)
+    else:
+        output += "\n/list lists all available drinks and their prices.\n\n"
+        output += "/balance shows your account balance.\n\n"
+        output += "/buy displays buttons for each beverage to purchase said beverage.\n\n"
+        output += "/help displays this message."
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
 
 def commandList(bot, update): # Display available drinks
     drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
@@ -39,7 +58,7 @@ def commandBuy(bot, update): # Display available drinks as buttons and charge us
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_helponly_markup)
     else:
         drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
         kb_drinks = list()
@@ -60,14 +79,20 @@ def commandBalance(bot, update): # Display current balance of user
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_helponly_markup)
     else:
         balance = getBalance(mete_id)
         output = "Your balance is _{:.2f}€_".format(balance)
-    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
 def commandCancel(bot, update):
-    output = "This request has been cancelled."
-    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
+    mete_id = getMeteID(update.message.chat_id)
+    if mete_id is None:
+        output = "You are not linked to a mete account!"
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_helponly_markup)
+    else:
+        output = "This request has been cancelled."
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
 
 def request_link(bot, update): # Check request for account linking and act accordingly
     query = update.inline_query
@@ -132,7 +157,7 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
                 output = "*ERROR*: This user is already linked to Mete!"
                 answer = "Error!"
             else:
-                cursor.execute('''INSERT INTO users(telegram_id, mete_id) VALUES(?,?)''', (telegram_id, mete_id,))
+                cursor.execute('''INSERT INTO users(telegram_id, mete_id, user_handle) VALUES(?,?,?)''', (telegram_id, mete_id,"?",))
                 output = "Successfully connected this user to Mete!"
                 answer = "Success!"
         database.commit()
@@ -145,7 +170,7 @@ def handle_textinput(bot, update):
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_helponly_markup, parse_mode=ParseMode.MARKDOWN)
         return
     input = update.message.text
     splitup_input = input.split(":")
