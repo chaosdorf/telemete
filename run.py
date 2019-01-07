@@ -49,7 +49,7 @@ def commandStart(bot, update): # Startup and help message
         admin_handles = cursor.fetchall()
         for u in admin_handles:
             output += "@{}\n".format(u[0])
-        output += "Please have your mete id ready to speed up the process."
+        output += "Please have your mete ID ready to speed up the process."
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         output += "\n/list lists all available drinks and their prices.\n\n"
