@@ -5,14 +5,24 @@ from math import sqrt
 import requests
 import json
 import sqlite3
+from os import environ
 
-# Create a file called valuables.py like below and place it in the same folder as this
+# Set the following environmental variables:
 
-# valuables.py
 # API_KEY=the key from telegram's botfather (string)
-# BASE_ADDRESS=the address of your mete instance (string) // Sidenote: http://BASE_ADDRESS/, so don't include http here
-# INIT_ADMIN={'telegram_id': your telegram id (int), 'mete_id': your mete id (int), 'user_handle': your telegram handle (string)}
+# BASE_URL=the address of your mete instance (string) // Sidenote: http://BASE_URL/, so don't include http here
+# INIT_TELEGRAM_ID=the telegram ID of the initial administrator (you can get it from t.me/userinfobot or @userinfobot on telegram)
+# INIT_METE_ID=the mete ID of the initial administrator
+# INIT_USER_HANDLE=the telegram user handle of the initial administrator
 
+# Sidenote: This bot requires all administrators to have a user handle on telegram for the purpose of users easily contacting them.
+# So make sure only users with handles get promoted.
+
+API_KEY = environ['API_KEY']
+BASE_URL = environ['BASE_URL']
+INIT_TELEGRAM_ID = int(environ['INIT_TELEGRAM_ID'])
+INIT_METE_ID = int(environ['INIT_METE_ID'])
+INIT_USER_HANDLE = environ['INIT_USER_HANDLE']
 
 updater = Updater(token=API_KEY)
 dispatcher = updater.dispatcher
@@ -23,9 +33,9 @@ cursor = database.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, telegram_id INTEGER, mete_id INTEGER, admin INTEGER DEFAULT 0, user_handle TEXT)''')
 
 # Check if initial admin has been linked and perform link if not
-cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (INIT_ADMIN['telegram_id'],))
+cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (INIT_TELEGRAM_ID,))
 if cursor.fetchone() is None:
-    cursor.execute('''INSERT INTO users(telegram_id, mete_id, admin, user_handle) VALUES(?,?,?,?)''', (INIT_ADMIN['telegram_id'], INIT_ADMIN['mete_id'], 1, INIT_ADMIN['user_handle'],))
+    cursor.execute('''INSERT INTO users(telegram_id, mete_id, admin, user_handle) VALUES(?,?,?,?)''', (INIT_TELEGRAM_ID, INIT_METE_ID, 1, INIT_USER_HANDLE,))
 database.commit()
 cursor.close()
 
@@ -60,7 +70,7 @@ def commandStart(bot, update): # Startup and help message
 
 def commandList(bot, update): # Display available drinks
     # Get a list of all drinks (list[dict()])
-    drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
+    drink_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/drinks.json").text)
 
     output = "Available drinks:\n"
 
@@ -76,7 +86,7 @@ def commandBuy(bot, update): # Display available drinks as buttons and charge us
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         # Get a list of all drinks (list[dict()])
-        drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
+        drink_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/drinks.json").text)
         kb_drinks = list()
 
         output = "Please choose a drink from the list below:\n"
@@ -134,7 +144,7 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
     if input[0] == "link": # Link the recipient of the message to the specified mete account (Needs to be confirmed by recipient)
         mete_id = int(input[1])
         # Get a list of all users (list[dict()])
-        mete_user_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/users.json").text)
+        mete_user_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/users.json").text)
 
         valid_user = False
         for user in mete_user_list:
@@ -202,8 +212,7 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
             if isAdmin:
                 output = "*ERROR*: This user is already an administrator!"
                 answer = "Error!"
-                abort = True
-            if not abort:
+            else:
                 user_handle = user.username
                 cursor.execute('''UPDATE users SET admin=1 WHERE telegram_id=?''', (telegram_id,))
                 cursor.execute('''UPDATE users SET user_handle=? WHERE telegram_id=?''', (user_handle, telegram_id,))
@@ -232,7 +241,7 @@ def handle_textinput(bot, update): # Handle any non-command text input to this b
         abort = True
 
         # Get a list of all drinks (list[dict()])
-        drink_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/drinks.json").text)
+        drink_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/drinks.json").text)
 
         for drink in drink_list:
             if name == drink['name'] and price == "{:.2f}".format(float(drink['price'])):
@@ -241,7 +250,7 @@ def handle_textinput(bot, update): # Handle any non-command text input to this b
                 break
         if not abort:
             # Buy a drink via http request
-            requests.get("http://{}/api/v1/users/{}/buy?drink={}".format(BASE_ADDRESS, mete_id, drink_id))
+            requests.get("http://{}/api/v1/users/{}/buy?drink={}".format(BASE_URL, mete_id, drink_id))
             output = "You purchased _{}_. Your new balance is _{:.2f}€_".format(name, getBalance(mete_id))
             bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
             return
@@ -261,7 +270,7 @@ def getMeteID(telegram_id): # Returns the mete id linked to the specified telegr
 
 def getBalance(mete_id): # Returns the specified user's balance as a float (Only used by other functions, validity of the mete id needs to be checked prior to calling this!)
     # Get a list of all users (list[dict()])
-    mete_user_list = json.loads(requests.get(f"http://{BASE_ADDRESS}/api/v1/users.json").text)
+    mete_user_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/users.json").text)
     for user in mete_user_list:
         if user['id'] == mete_id:
             balance = float(user['balance'])
