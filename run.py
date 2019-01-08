@@ -213,14 +213,18 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
                 output = "*ERROR*: This user is already an administrator!"
                 answer = "Error!"
             else:
-                user_handle = user.username
-                cursor.execute('''UPDATE users SET admin=1 WHERE telegram_id=?''', (telegram_id,))
-                cursor.execute('''UPDATE users SET user_handle=? WHERE telegram_id=?''', (user_handle, telegram_id,))
-                database.commit()
-                cursor.close()
+                if user.username is None:
+                    output = "*ERROR*: This user does not have a username!"
+                    answer = "Error!"
+                else:
+                    user_handle = user.username
+                    cursor.execute('''UPDATE users SET admin=1 WHERE telegram_id=?''', (telegram_id,))
+                    cursor.execute('''UPDATE users SET user_handle=? WHERE telegram_id=?''', (user_handle, telegram_id,))
+                    database.commit()
+                    cursor.close()
 
-                output = "Successfully promoted this user to administrator!"
-                output = "Success!"
+                    output = "Successfully promoted this user to administrator!"
+                    output = "Success!"
     elif data[0] == "cancel": # Cancel inline requests
         output = "This request has been cancelled."
         answer = "Cancelled!"
