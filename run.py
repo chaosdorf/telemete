@@ -26,7 +26,7 @@ INIT_USER_HANDLE = environ['INIT_USER_HANDLE']
 
 updater = Updater(token=API_KEY)
 dispatcher = updater.dispatcher
-database = sqlite3.connect("user_data")
+database = sqlite3.connect("data/user_links")
 cursor = database.cursor()
 
 # This table contains the link between telegram and mete ids, whether or not a user is admin and their @-handle for telegram
@@ -53,7 +53,7 @@ def commandStart(bot, update): # Startup and help message
     output = "Welcome to the Chaosdorf-Mete UI!\n"
     if mete_id is None:
         output += "You are currently not linked with a mete account. Please contact one of the administrators:\n"
-        database = sqlite3.connect("user_data")
+        database = sqlite3.connect("data/user_links")
         cursor = database.cursor()
         cursor.execute('''SELECT user_handle FROM users WHERE admin=1''')
         admin_handles = cursor.fetchall()
@@ -123,7 +123,7 @@ def commandCancel(bot, update): # Cancel action and return to standard button la
 def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
     query = update.inline_query
     sender_id = query.from_user.id
-    database = sqlite3.connect("user_data")
+    database = sqlite3.connect("data/user_links")
     cursor = database.cursor()
 
 
@@ -182,7 +182,7 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
         mete_id = int(data[1])
         telegram_id = query.from_user.id
 
-        database = sqlite3.connect("user_data")
+        database = sqlite3.connect("data/user_links")
         cursor = database.cursor()
         cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (telegram_id,))
         if not (cursor.fetchone() is None):
@@ -204,7 +204,7 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
             output = "*ERROR*: This user is not linked to Mete!"
             answer = "Error!"
         else:
-            database = sqlite3.connect("user_data")
+            database = sqlite3.connect("data/user_links")
             cursor = database.cursor()
 
             cursor.execute('''SELECT admin FROM users WHERE telegram_id=?''', (telegram_id,))
@@ -262,7 +262,7 @@ def handle_textinput(bot, update): # Handle any non-command text input to this b
     bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
 def getMeteID(telegram_id): # Returns the mete id linked to the specified telegram id or None, if there is no link
-    database = sqlite3.connect("user_data")
+    database = sqlite3.connect("data/user_links")
     cursor = database.cursor()
 
     cursor.execute('''SELECT mete_id FROM users WHERE telegram_id=?''', (telegram_id,))
