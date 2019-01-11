@@ -1,6 +1,5 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, InlineQueryHandler, CallbackQueryHandler
 from telegram import InlineQueryResultArticle, InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
-from valuables import API_KEY, BASE_ADDRESS, INIT_ADMIN
 from math import sqrt
 import requests
 import json
