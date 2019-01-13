@@ -49,13 +49,17 @@ kb_newusers_markup = ReplyKeyboardMarkup(kb_newusers, resize_keyboard=True)
 
 def commandStart(bot, update): # Startup and help message
     mete_id = getMeteID(update.message.chat_id)
-    output = "Welcome to the Chaosdorf-Mete UI!\n"
+    bot_name = bot.first_name
+    if not bot.last_name is None:
+        bot_name += bot.last_name
+    output = "*Welcome to the {} UI!*\n".format(bot_name)
     if mete_id is None:
         output += "You are currently not linked with a mete account. Please contact one of the administrators:\n"
         database = sqlite3.connect("data/user_links")
         cursor = database.cursor()
         cursor.execute('''SELECT user_handle FROM users WHERE admin=1''')
         admin_handles = cursor.fetchall()
+        cursor.close()
         for u in admin_handles:
             output += "@{}\n".format(u[0])
         output += "Please have your mete ID ready to speed up the process."
@@ -65,7 +69,20 @@ def commandStart(bot, update): # Startup and help message
         output += "/balance shows your account balance.\n\n"
         output += "/buy displays buttons for each beverage to purchase said beverage.\n\n"
         output += "/help displays this message."
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
+
+        database = sqlite3.connect("data/user_links")
+        cursor = database.cursor()
+        cursor.execute('''SELECT admin FROM users WHERE mete_id=?''', (mete_id, ))
+        admin = cursor.fetchone()[0]
+        cursor.close()
+
+        if admin:
+            output += "\n\n*Admin only:*\n\n"
+            output += "You can link users via inline-mode.\n"
+            output += "Open the user's chat. Then type _@{} link mete-id_ where mete-id is the other user's mete ID you wish to link.\n".format(bot.username)
+            output += "Click on 'Send link request'. The other user then presses the button 'Link accounts'.\n\n"
+            output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(bot.username)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
 def commandList(bot, update): # Display available drinks
     # Get a list of all drinks (list[dict()])
@@ -163,8 +180,6 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
         cursor.execute('''SELECT id FROM users WHERE mete_id=?''', (mete_id,))
         if not (cursor.fetchone() is None):
             return
-        database.commit()
-        cursor.close()
 
         output = "Press 'Link accounts' to link your Telegram account to the Mete account *{}*_(id: {})_.".format(mete_name, mete_id)
         kb_link = [[InlineKeyboardButton("Link accounts", callback_data="link/" + str(mete_id))], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
@@ -175,10 +190,10 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
         output = "Press 'Become administrator' to become a Chaosdorf-Mete administrator."
         kb_admin_requests = [[InlineKeyboardButton("Become administrator", callback_data="promote")], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
         kb_admin_requests_markup = InlineKeyboardMarkup(kb_admin_requests)
-        cursor.close()
 
         results.append(InlineQueryResultArticle(id="0", title="Send promotion request", input_message_content=InputTextMessageContent(output), reply_markup=kb_admin_requests_markup))
     bot.answer_inline_query(query.id, results)
+    cursor.close()
 
 def handle_buttonpress(bot, update): # Handle any inline buttonpresses related to this bot
     query = update.callback_query
@@ -226,10 +241,10 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
                     cursor.execute('''UPDATE users SET admin=1 WHERE telegram_id=?''', (telegram_id,))
                     cursor.execute('''UPDATE users SET user_handle=? WHERE telegram_id=?''', (user_handle, telegram_id,))
                     database.commit()
-                    cursor.close()
 
                     output = "Successfully promoted this user to administrator!"
                     output = "Success!"
+            cursor.close()
     elif data[0] == "cancel": # Cancel inline requests
         output = "This request has been cancelled."
         answer = "Cancelled!"
@@ -272,6 +287,7 @@ def getMeteID(telegram_id): # Returns the mete id linked to the specified telegr
 
     cursor.execute('''SELECT mete_id FROM users WHERE telegram_id=?''', (telegram_id,))
     mete_id = cursor.fetchone()
+    cursor.close()
     if mete_id is None:
         return None
     else:
