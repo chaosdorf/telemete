@@ -6,7 +6,7 @@ RUN pip install python-telegram-bot
 RUN pip install requests
 RUN mkdir data
 
-COPY . .
+COPY run.py . 
 
 ENTRYPOINT [ "python", "/usr/src/app/run.py" ]
 
