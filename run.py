@@ -74,7 +74,8 @@ def commandList(bot, update): # Display available drinks
     output = "Available drinks:\n"
 
     for drink in drink_list:
-        output += "\n{}: _{:.2f}€_".format(drink['name'], float(drink['price']))
+        if drink['active']:
+            output += "\n{}: _{:.2f}€_".format(drink['name'], float(drink['price']))
 
     bot.sendMessage(chat_id=update.message.chat_id, text=output, parse_mode=ParseMode.MARKDOWN, reply_markup=kb_markup)
 
@@ -88,11 +89,16 @@ def commandBuy(bot, update): # Display available drinks as buttons and charge us
         drink_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/drinks.json").text)
         kb_drinks = list()
 
+        # Only list active drinks
+        active_drinks = []
+        for drink in drink_list:
+            if drink["active"]:
+                active_drinks.append(drink)
         output = "Please choose a drink from the list below:\n"
-        n = int(len(drink_list)/3) + 1
+        n = int(len(active_drinks)/3) + 1
         for i in range(n+1):
             column_drinks = list()
-            for drink in drink_list[i*3:(i+1)*3]:
+            for drink in active_drinks[i*3:(i+1)*3]:
                 drink_details = "{}: {:.2f}€".format(drink['name'], float(drink['price']))
                 column_drinks.append(KeyboardButton(drink_details))
             kb_drinks.append(column_drinks)
