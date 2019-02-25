@@ -1,4 +1,5 @@
-FROM python:3.7.2
+FROM python:3.7-alpine
+RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev
 
 WORKDIR /usr/src/app
 
@@ -9,4 +10,3 @@ RUN mkdir data
 COPY run.py . 
 
 ENTRYPOINT [ "python", "/usr/src/app/run.py" ]
-
