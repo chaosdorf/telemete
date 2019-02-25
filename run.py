@@ -9,7 +9,7 @@ from os import environ
 # Set the following environmental variables:
 
 # API_KEY=the key from telegram's botfather (string)
-# BASE_URL=the address of your mete instance (string) // Sidenote: http://BASE_URL/, so don't include http here
+# BASE_URL=the address of your mete instance (string)
 # INIT_TELEGRAM_ID=the telegram ID of the initial administrator (you can get it from t.me/userinfobot or @userinfobot on telegram)
 # INIT_METE_ID=the mete ID of the initial administrator
 # INIT_USER_HANDLE=the telegram user handle of the initial administrator
@@ -86,7 +86,7 @@ def commandStart(bot, update): # Startup and help message
 
 def commandList(bot, update): # Display available drinks
     # Get a list of all drinks (list[dict()])
-    drink_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/drinks.json").text)
+    drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
 
     output = "Available drinks:\n"
 
@@ -103,7 +103,7 @@ def commandBuy(bot, update): # Display available drinks as buttons and charge us
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         # Get a list of all drinks (list[dict()])
-        drink_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/drinks.json").text)
+        drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
         kb_drinks = list()
 
         # Only list active drinks
@@ -166,7 +166,7 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
     if input[0] == "link": # Link the recipient of the message to the specified mete account (Needs to be confirmed by recipient)
         mete_id = int(input[1])
         # Get a list of all users (list[dict()])
-        mete_user_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/users.json").text)
+        mete_user_list = json.loads(requests.get(f"{BASE_URL}/api/v1/users.json").text)
 
         valid_user = False
         for user in mete_user_list:
@@ -265,7 +265,7 @@ def handle_textinput(bot, update): # Handle any non-command text input to this b
         abort = True
 
         # Get a list of all drinks (list[dict()])
-        drink_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/drinks.json").text)
+        drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
 
         for drink in drink_list:
             if name == drink['name'] and price == "{:.2f}".format(float(drink['price'])):
@@ -274,7 +274,7 @@ def handle_textinput(bot, update): # Handle any non-command text input to this b
                 break
         if not abort:
             # Buy a drink via http request
-            requests.get("http://{}/api/v1/users/{}/buy?drink={}".format(BASE_URL, mete_id, drink_id))
+            requests.get("{}/api/v1/users/{}/buy?drink={}".format(BASE_URL, mete_id, drink_id))
             output = "You purchased _{}_. Your new balance is _{:.2f}€_".format(name, getBalance(mete_id))
             bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
             return
@@ -295,7 +295,7 @@ def getMeteID(telegram_id): # Returns the mete id linked to the specified telegr
 
 def getBalance(mete_id): # Returns the specified user's balance as a float (Only used by other functions, validity of the mete id needs to be checked prior to calling this!)
     # Get a list of all users (list[dict()])
-    mete_user_list = json.loads(requests.get(f"http://{BASE_URL}/api/v1/users.json").text)
+    mete_user_list = json.loads(requests.get(f"{BASE_URL}/api/v1/users.json").text)
     for user in mete_user_list:
         if user['id'] == mete_id:
             balance = float(user['balance'])
