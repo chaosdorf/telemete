@@ -5,10 +5,11 @@ import requests
 import json
 import sqlite3
 from os import environ
+from pathlib import Path
 
 # Set the following environmental variables:
 
-# API_KEY=the key from telegram's botfather (string)
+# API_KEY=the key from telegram's botfather (string) // preferred: /run/secrets/TELEMETE_TELEGRAM_API_KEY
 # BASE_URL=the address of your mete instance (string)
 # INIT_TELEGRAM_ID=the telegram ID of the initial administrator (you can get it from t.me/userinfobot or @userinfobot on telegram)
 # INIT_METE_ID=the mete ID of the initial administrator
@@ -17,7 +18,16 @@ from os import environ
 # Sidenote: This bot requires all administrators to have a user handle on telegram for the purpose of users easily contacting them.
 # So make sure only users with handles get promoted.
 
-API_KEY = environ['API_KEY']
+
+def get_secret(name):
+    p = Path(f"/run/secrets/TELEMETE_{name}")
+    if p.exists():
+        return p.read_text().strip()
+    print(f"WARN: Secret TELEMETE_{name} not found, falling back to environment variable {name}...")
+    return environ[name]
+
+
+API_KEY = get_secret('API_KEY')
 BASE_URL = environ['BASE_URL']
 INIT_TELEGRAM_ID = int(environ['INIT_TELEGRAM_ID'])
 INIT_METE_ID = int(environ['INIT_METE_ID'])
