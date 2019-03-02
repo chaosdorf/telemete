@@ -9,14 +9,7 @@ import toml
 from os import environ
 from pathlib import Path
 
-# Set the following environmental variables:
-
-# API_KEY=the key from telegram's botfather (string) // preferred: /run/secrets/TELEMETE_TELEGRAM_API_KEY
-# SENTRY_DSN=the key for the project in Sentry // preferred: /run/secrets/TELEMETE_SENTRY_DSN
-# CONFIG_FILE=the path to config.toml
-
-# Sidenote: This bot requires all administrators to have a user handle on telegram for the purpose of users easily contacting them.
-# So make sure only users with handles get promoted.
+# please see the README for configuration options
 
 
 def get_secret(name):
