@@ -5,6 +5,7 @@ from math import sqrt
 import requests
 import json
 import sqlite3
+import toml
 from os import environ
 from pathlib import Path
 
@@ -12,10 +13,7 @@ from pathlib import Path
 
 # API_KEY=the key from telegram's botfather (string) // preferred: /run/secrets/TELEMETE_TELEGRAM_API_KEY
 # SENTRY_DSN=the key for the project in Sentry // preferred: /run/secrets/TELEMETE_SENTRY_DSN
-# BASE_URL=the address of your mete instance (string)
-# INIT_TELEGRAM_ID=the telegram ID of the initial administrator (you can get it from t.me/userinfobot or @userinfobot on telegram)
-# INIT_METE_ID=the mete ID of the initial administrator
-# INIT_USER_HANDLE=the telegram user handle of the initial administrator
+# CONFIG_FILE=the path to config.toml
 
 # Sidenote: This bot requires all administrators to have a user handle on telegram for the purpose of users easily contacting them.
 # So make sure only users with handles get promoted.
@@ -30,16 +28,14 @@ def get_secret(name):
 
 
 API_KEY = get_secret('API_KEY')
-BASE_URL = environ['BASE_URL']
-INIT_TELEGRAM_ID = int(environ['INIT_TELEGRAM_ID'])
-INIT_METE_ID = int(environ['INIT_METE_ID'])
-INIT_USER_HANDLE = environ['INIT_USER_HANDLE']
 try:
     SENTRY_DSN = get_secret('SENTRY_DSN')
 except KeyError:
     SENTRY_DSN = None
     print("SENTRY_DSN not configured, not logging exceptions.")
 
+config = toml.load(environ["CONFIG_FILE"])
+BASE_URL = config['mete_connection']['base_url']
 updater = Updater(token=API_KEY)
 dispatcher = updater.dispatcher
 raven_client = RavenClient(SENTRY_DSN) if SENTRY_DSN else None
@@ -50,11 +46,13 @@ cursor = database.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, telegram_id INTEGER, mete_id INTEGER, admin INTEGER DEFAULT 0, user_handle TEXT)''')
 
 # Check if initial admin has been linked and perform link if not
-cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (INIT_TELEGRAM_ID,))
+initial_admin = config['initial_admin']
+cursor.execute('''SELECT id FROM users WHERE telegram_id=?''', (initial_admin['telegram_id'],))
 if cursor.fetchone() is None:
-    cursor.execute('''INSERT INTO users(telegram_id, mete_id, admin, user_handle) VALUES(?,?,?,?)''', (INIT_TELEGRAM_ID, INIT_METE_ID, 1, INIT_USER_HANDLE,))
+    cursor.execute('''INSERT INTO users(telegram_id, mete_id, admin, user_handle) VALUES(?,?,?,?)''', (initial_admin['telegram_id'], initial_admin['mete_id'], 1, initial_admin['telegram_handle'],))
 database.commit()
 cursor.close()
+del initial_admin
 
 # Default Button Layout for the most important commands
 kb = [[KeyboardButton("/list"), KeyboardButton("/buy"), KeyboardButton("/balance"), KeyboardButton("/help")]]
