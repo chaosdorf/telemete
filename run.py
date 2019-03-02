@@ -1,5 +1,6 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, InlineQueryHandler, CallbackQueryHandler
 from telegram import InlineQueryResultArticle, InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
+from raven import Client as RavenClient
 from math import sqrt
 import requests
 import json
@@ -10,6 +11,7 @@ from pathlib import Path
 # Set the following environmental variables:
 
 # API_KEY=the key from telegram's botfather (string) // preferred: /run/secrets/TELEMETE_TELEGRAM_API_KEY
+# SENTRY_DSN=the key for the project in Sentry // preferred: /run/secrets/TELEMETE_SENTRY_DSN
 # BASE_URL=the address of your mete instance (string)
 # INIT_TELEGRAM_ID=the telegram ID of the initial administrator (you can get it from t.me/userinfobot or @userinfobot on telegram)
 # INIT_METE_ID=the mete ID of the initial administrator
@@ -32,9 +34,15 @@ BASE_URL = environ['BASE_URL']
 INIT_TELEGRAM_ID = int(environ['INIT_TELEGRAM_ID'])
 INIT_METE_ID = int(environ['INIT_METE_ID'])
 INIT_USER_HANDLE = environ['INIT_USER_HANDLE']
+try:
+    SENTRY_DSN = get_secret('SENTRY_DSN')
+except KeyError:
+    SENTRY_DSN = None
+    print("SENTRY_DSN not configured, not logging exceptions.")
 
 updater = Updater(token=API_KEY)
 dispatcher = updater.dispatcher
+raven_client = RavenClient(SENTRY_DSN) if SENTRY_DSN else None
 database = sqlite3.connect("data/user_links")
 cursor = database.cursor()
 
@@ -57,6 +65,24 @@ kb_newusers = [[KeyboardButton("/start"), KeyboardButton("/list")]]
 kb_markup = ReplyKeyboardMarkup(kb, resize_keyboard=True)
 kb_newusers_markup = ReplyKeyboardMarkup(kb_newusers, resize_keyboard=True)
 
+
+def record_exception(old_func):
+    def new_func(bot, update):
+        try:
+            old_func(bot, update)
+        except:  # noqa
+            ident = None
+            try:
+                ident = raven_client.get_ident(raven_client.captureException())
+            finally:
+                output = "Sorry, the bot crashed."
+                if ident:
+                    output += f"\nThis issue has been logged with the id {ident}."
+                bot.sendMessage(chat_id=update.message.chat_id, text=output)
+    return new_func
+
+
+@record_exception
 def commandStart(bot, update): # Startup and help message
     mete_id = getMeteID(update.message.chat_id)
     bot_name = bot.first_name
@@ -94,6 +120,8 @@ def commandStart(bot, update): # Startup and help message
             output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(bot.username)
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
+
+@record_exception
 def commandList(bot, update): # Display available drinks
     # Get a list of all drinks (list[dict()])
     drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
@@ -106,6 +134,8 @@ def commandList(bot, update): # Display available drinks
 
     bot.sendMessage(chat_id=update.message.chat_id, text=output, parse_mode=ParseMode.MARKDOWN, reply_markup=kb_markup)
 
+
+@record_exception
 def commandBuy(bot, update): # Display available drinks as buttons and charge user accordingly
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
@@ -133,6 +163,8 @@ def commandBuy(bot, update): # Display available drinks as buttons and charge us
         kb_drinks_markup = ReplyKeyboardMarkup(kb_drinks)
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_drinks_markup)
 
+
+@record_exception
 def commandBalance(bot, update): # Display current balance of user
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
@@ -143,6 +175,8 @@ def commandBalance(bot, update): # Display current balance of user
         output = "Your balance is _{:.2f}€_".format(balance)
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
+
+@record_exception
 def commandCancel(bot, update): # Cancel action and return to standard button layout
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
@@ -152,6 +186,8 @@ def commandCancel(bot, update): # Cancel action and return to standard button la
         output = "This request has been cancelled."
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
 
+
+@record_exception
 def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
     query = update.inline_query
     sender_id = query.from_user.id
@@ -205,6 +241,8 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
     bot.answer_inline_query(query.id, results)
     cursor.close()
 
+
+@record_exception
 def handle_buttonpress(bot, update): # Handle any inline buttonpresses related to this bot
     query = update.callback_query
     data = query.data.split("/")
@@ -261,6 +299,8 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
     bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
     bot.answer_callback_query(query.id, text=answer)
 
+
+@record_exception
 def handle_textinput(bot, update): # Handle any non-command text input to this bot
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
