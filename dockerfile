@@ -10,5 +10,6 @@ RUN pipenv install --system --deploy
 RUN mkdir data
 
 COPY run.py . 
+COPY .git .
 
 ENTRYPOINT [ "python", "/usr/src/app/run.py" ]

@@ -6,6 +6,7 @@ import requests
 import json
 import sqlite3
 import toml
+from dealer.git import git
 from os import environ
 from pathlib import Path
 
@@ -110,7 +111,7 @@ def commandStart(bot, update): # Startup and help message
             output += "Click on 'Send link request'. The other user then presses the button 'Link accounts'.\n\n"
             output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(bot.username)
         
-        output += "\n\nThis bot is powered by free software. You can find the source at https://github.com/chaosdorf/telemete."
+        output += f"\n\nThis bot is running telemete [{git.revision}](https://github.com/chaosdorf/telemete/tree/{git.revision})."
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
 
