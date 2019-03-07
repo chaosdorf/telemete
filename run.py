@@ -91,7 +91,7 @@ def commandStart(bot, update): # Startup and help message
         for u in admin_handles:
             output += "@{}\n".format(u[0])
         output += "Please have your mete ID ready to speed up the process."
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup, parse_mode=ParseMode.MARKDOWN)
     else:
         output += "\n/list lists all available drinks and their prices.\n\n"
         output += "/balance shows your account balance.\n\n"
@@ -110,7 +110,7 @@ def commandStart(bot, update): # Startup and help message
             output += "Open the user's chat. Then type _@{} link mete-id_ where mete-id is the other user's mete ID you wish to link.\n".format(bot.username)
             output += "Click on 'Send link request'. The other user then presses the button 'Link accounts'.\n\n"
             output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(bot.username)
-        
+
         output += f"\n\nThis bot is running telemete [{git.revision}](https://github.com/chaosdorf/telemete/tree/{git.revision})."
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
 
