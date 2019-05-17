@@ -221,13 +221,19 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
 
         cursor.execute('''SELECT id FROM users WHERE mete_id=?''', (mete_id,))
         if not (cursor.fetchone() is None):
-            return
+            # The user is already linked - print a helpful error message
+            output = "This Telegram account is already linked to the Mete account *{}*_(id: {})_. 😔".format(mete_name, mete_id)
+            kb_link = [[InlineKeyboardButton("Sorry...", callback_data="cancel")]]
+            kb_link_markup = InlineKeyboardMarkup(kb_link)
 
-        output = "Press 'Link accounts' to link your Telegram account to the Mete account *{}*_(id: {})_.".format(mete_name, mete_id)
-        kb_link = [[InlineKeyboardButton("Link accounts", callback_data="link/" + str(mete_id))], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
-        kb_link_markup = InlineKeyboardMarkup(kb_link)
+            results.append(InlineQueryResultArticle(id="0", title="User already linked!", input_message_content=InputTextMessageContent(output, parse_mode=ParseMode.MARKDOWN), reply_markup=kb_link_markup))
+        else:
+            # User is not linked yet - send link request buttons
+            output = "Press 'Link accounts' to link your Telegram account to the Mete account *{}*_(id: {})_.".format(mete_name, mete_id)
+            kb_link = [[InlineKeyboardButton("Link accounts", callback_data="link/" + str(mete_id))], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
+            kb_link_markup = InlineKeyboardMarkup(kb_link)
 
-        results.append(InlineQueryResultArticle(id="0", title="Send link request", input_message_content=InputTextMessageContent(output, parse_mode=ParseMode.MARKDOWN), reply_markup=kb_link_markup))
+            results.append(InlineQueryResultArticle(id="0", title="Send link request", input_message_content=InputTextMessageContent(output, parse_mode=ParseMode.MARKDOWN), reply_markup=kb_link_markup))
     elif input[0] == "promote": # Promote the recipient of the message to be an administrator (Needs to be confirmed by recipient)
         output = "Press 'Become administrator' to become a Chaosdorf-Mete administrator."
         kb_admin_requests = [[InlineKeyboardButton("Become administrator", callback_data="promote")], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
