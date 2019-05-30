@@ -48,13 +48,9 @@ database.commit()
 cursor.close()
 del initial_admin
 
-# Default Button Layout for the most important commands
-kb = [[KeyboardButton("/list"), KeyboardButton("/buy"), KeyboardButton("/balance"), KeyboardButton("/help")]]
-
 # Buttonlayout for non-registered users
 kb_newusers = [[KeyboardButton("/start"), KeyboardButton("/list")]]
 
-kb_markup = ReplyKeyboardMarkup(kb, resize_keyboard=True)
 kb_newusers_markup = ReplyKeyboardMarkup(kb_newusers, resize_keyboard=True)
 
 
@@ -93,9 +89,8 @@ def commandStart(bot, update): # Startup and help message
         output += "Please have your mete ID ready to speed up the process."
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup, parse_mode=ParseMode.MARKDOWN)
     else:
-        output += "\n/list lists all available drinks and their prices.\n\n"
+        output += "\nJust press one of the buttons below to buy a drink!\n\n"
         output += "/balance shows your account balance.\n\n"
-        output += "/buy displays buttons for each beverage to purchase said beverage.\n\n"
         output += "/help displays this message."
 
         database = sqlite3.connect("data/user_links")
@@ -112,50 +107,7 @@ def commandStart(bot, update): # Startup and help message
             output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(bot.username)
 
         output += f"\n\nThis bot is running telemete [{git.revision}](https://github.com/chaosdorf/telemete/tree/{git.revision})."
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
-
-
-@record_exception
-def commandList(bot, update): # Display available drinks
-    # Get a list of all drinks (list[dict()])
-    drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
-
-    output = "Available drinks:\n"
-
-    for drink in drink_list:
-        if drink['active']:
-            output += "\n{}: _{:.2f}€_".format(drink['name'], float(drink['price']))
-
-    bot.sendMessage(chat_id=update.message.chat_id, text=output, parse_mode=ParseMode.MARKDOWN, reply_markup=kb_markup)
-
-
-@record_exception
-def commandBuy(bot, update): # Display available drinks as buttons and charge user accordingly
-    mete_id = getMeteID(update.message.chat_id)
-    if mete_id is None:
-        output = "You are not linked to a mete account!"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
-    else:
-        # Get a list of all drinks (list[dict()])
-        drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
-        kb_drinks = list()
-
-        # Only list active drinks
-        active_drinks = []
-        for drink in drink_list:
-            if drink["active"]:
-                active_drinks.append(drink)
-        output = "Please choose a drink from the list below:\n"
-        n = int(len(active_drinks)/3) + 1
-        for i in range(n+1):
-            column_drinks = list()
-            for drink in active_drinks[i*3:(i+1)*3]:
-                drink_details = "{}: {:.2f}€".format(drink['name'], float(drink['price']))
-                column_drinks.append(KeyboardButton(drink_details))
-            kb_drinks.append(column_drinks)
-        kb_drinks.append([KeyboardButton("/cancel")])
-        kb_drinks_markup = ReplyKeyboardMarkup(kb_drinks)
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_drinks_markup)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 
 @record_exception
@@ -169,7 +121,7 @@ def commandBalance(bot, update): # Display current balance of user
         output = "Your balance is _{:.2f}€_".format(balance)
         if balance < 0: # Alert for negative account balance
             output += "\n\n*Your account balance is negative.*"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 
 @record_exception
@@ -180,7 +132,7 @@ def commandCancel(bot, update): # Cancel action and return to standard button la
         bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         output = "This request has been cancelled."
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup)
+        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup())
 
 
 @record_exception
@@ -331,10 +283,10 @@ def handle_textinput(bot, update): # Handle any non-command text input to this b
             output = "You purchased _{}_. Your new balance is _{:.2f}€_".format(name, balance)
             if balance < 0: # Alert for negative account balance
                 output += "\n\n*Your account balance is negative.*"
-            bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+            bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
             return
     output = "Your input confused me. Get some /help"
-    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_markup, parse_mode=ParseMode.MARKDOWN)
+    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 def getMeteID(telegram_id): # Returns the mete id linked to the specified telegram id or None, if there is no link
     database = sqlite3.connect("data/user_links")
@@ -357,10 +309,28 @@ def getBalance(mete_id): # Returns the specified user's balance as a float (Only
             break
     return balance
 
+def getDefaultKeyboardMarkup(): # Returns a keyboard containing buttons for every drink marked as active
+    drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
+    kb_default = list()
+
+    # Only list active drinks
+    active_drinks = []
+    for drink in drink_list:
+        if drink["active"]:
+            active_drinks.append(drink)
+    n = int(len(active_drinks)/3) + 1
+    for i in range(n+1):
+        column_drinks = list()
+        for drink in active_drinks[i*3:(i+1)*3]:
+            drink_details = "{}: {:.2f}€".format(drink['name'], float(drink['price']))
+            column_drinks.append(KeyboardButton(drink_details))
+        kb_default.append(column_drinks)
+    kb_default.append([KeyboardButton("/balance"), KeyboardButton("/help")])
+    kb_default_markup = ReplyKeyboardMarkup(kb_default)
+    return kb_default_markup
+
 dispatcher.add_handler(CommandHandler('start', commandStart))
 dispatcher.add_handler(CommandHandler('help', commandStart))
-dispatcher.add_handler(CommandHandler('list', commandList))
-dispatcher.add_handler(CommandHandler('buy', commandBuy))
 dispatcher.add_handler(CommandHandler('balance', commandBalance))
 dispatcher.add_handler(CommandHandler('cancel', commandCancel))
 dispatcher.add_handler(InlineQueryHandler(handle_inlinerequest))
