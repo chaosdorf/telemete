@@ -53,7 +53,6 @@ kb_newusers = [[KeyboardButton("/start"), KeyboardButton("/list")]]
 
 kb_newusers_markup = ReplyKeyboardMarkup(kb_newusers, resize_keyboard=True)
 
-
 def record_exception(old_func):
     def new_func(bot, update):
         try:
@@ -91,7 +90,11 @@ def commandStart(bot, update): # Startup and help message
     else:
         output += "\nJust press one of the buttons below to buy a drink!\n\n"
         output += "/balance shows your account balance.\n\n"
-        output += "/help displays this message."
+        output += "/help displays this message.\n\n"
+        output += "You can also send a list of buttons for drink buying to any user you want.\n"
+        output += "Simply open their chat and type _@{}_ and click on 'Send drink buttons'.\n".format(bot.username)
+        output += "The buttons won't disappear, so you can use them as many times as you'd like.\n"
+        output += "The account of the person clicking on the button will be charged for the purchase."
 
         database = sqlite3.connect("data/user_links")
         cursor = database.cursor()
@@ -152,12 +155,9 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
 
     isAdmin = isAdmin[0]
 
-    if not isAdmin:
-        return
-
     results = list()
     input = query.query.split(" ")
-    if input[0] == "link": # Link the recipient of the message to the specified mete account (Needs to be confirmed by recipient)
+    if input[0] == "link" and isAdmin and len(input) >= 2: # Link the recipient of the message to the specified mete account (Needs to be confirmed by recipient)
         mete_id = int(input[1])
         # Get a list of all users (list[dict()])
         mete_user_list = json.loads(requests.get(f"{BASE_URL}/api/v1/users.json").text)
@@ -186,13 +186,15 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
             kb_link_markup = InlineKeyboardMarkup(kb_link)
 
             results.append(InlineQueryResultArticle(id="0", title="Send link request", input_message_content=InputTextMessageContent(output, parse_mode=ParseMode.MARKDOWN), reply_markup=kb_link_markup))
-    elif input[0] == "promote": # Promote the recipient of the message to be an administrator (Needs to be confirmed by recipient)
+    elif input[0] == "promote" and isAdmin: # Promote the recipient of the message to be an administrator (Needs to be confirmed by recipient)
         output = "Press 'Become administrator' to become a Chaosdorf-Mete administrator."
         kb_admin_requests = [[InlineKeyboardButton("Become administrator", callback_data="promote")], [InlineKeyboardButton("Cancel", callback_data="cancel")]]
         kb_admin_requests_markup = InlineKeyboardMarkup(kb_admin_requests)
 
         results.append(InlineQueryResultArticle(id="0", title="Send promotion request", input_message_content=InputTextMessageContent(output), reply_markup=kb_admin_requests_markup))
-    bot.answer_inline_query(query.id, results)
+    else:
+        results.append(InlineQueryResultArticle(id="0", title="Send drink buttons", input_message_content=InputTextMessageContent("Please press one of the buttons below to buy a drink."), reply_markup=getDrinkInlineKeyboardMarkup()))
+    bot.answer_inline_query(query.id, results, cache_time=0)
     cursor.close()
 
 
@@ -200,6 +202,7 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
 def handle_buttonpress(bot, update): # Handle any inline buttonpresses related to this bot
     query = update.callback_query
     data = query.data.split("/")
+    current_keyboard = None
     if data[0] == "link": # Confirm the linking of Telegram and Mete accounts
         mete_id = int(data[1])
         telegram_id = query.from_user.id
@@ -250,7 +253,37 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
     elif data[0] == "cancel": # Cancel inline requests
         output = "This request has been cancelled."
         answer = "Cancelled!"
-    bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN)
+    try:
+        drink_id = int(data[0])
+        user = query.from_user
+        telegram_id = user.id
+        mete_id = getMeteID(telegram_id)
+        if mete_id is None:
+            output = "*ERROR*: This user is not linked to Mete!"
+            answer = "Error!"
+        else:
+            requests.get("{}/api/v1/users/{}/buy?drink={}".format(BASE_URL, mete_id, drink_id))
+
+            drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
+
+            for drink in drink_list:
+                if drink['id'] == drink_id:
+                    drink_name = drink['name']
+                    drink_price = float(drink['price'])
+                    break
+
+            if not user.username is None:
+                username = user.username
+            else:
+                username = user.first_name
+            
+            output = "*{}* has bought _{}_ for _{:.2f}€_.".format(username, drink_name, drink_price)
+            answer = "Bought a drink!"
+        output += "\n\nPlease press one of the buttons below to buy a drink."
+        current_keyboard = getDrinkInlineKeyboardMarkup()
+    except ValueError:
+        pass
+    bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN, reply_markup=current_keyboard)
     bot.answer_callback_query(query.id, text=answer)
 
 
@@ -327,6 +360,24 @@ def getDefaultKeyboardMarkup(): # Returns a keyboard containing buttons for ever
         kb_default.append(column_drinks)
     kb_default.append([KeyboardButton("/balance"), KeyboardButton("/help")])
     kb_default_markup = ReplyKeyboardMarkup(kb_default)
+    return kb_default_markup
+
+def getDrinkInlineKeyboardMarkup(): # Returns a keyboard containing buttons for every drink marked as active for inline mode
+    drink_list = json.loads(requests.get(f"{BASE_URL}/api/v1/drinks.json").text)
+    kb_default = list()
+
+    # Only list active drinks
+    active_drinks = []
+    for drink in drink_list:
+        if drink["active"]:
+            active_drinks.append(drink)
+    n = int(len(active_drinks)/3) + 1
+    for i in range(n+1):
+        column_drinks = list()
+        for drink in active_drinks[i*3:(i+1)*3]:
+            column_drinks.append(InlineKeyboardButton(drink['name'], callback_data=str(drink['id'])))
+        kb_default.append(column_drinks)
+    kb_default_markup = InlineKeyboardMarkup(kb_default)
     return kb_default_markup
 
 dispatcher.add_handler(CommandHandler('start', commandStart))
