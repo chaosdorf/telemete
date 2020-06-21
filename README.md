@@ -8,7 +8,7 @@ Simply clone this repository, run `pipenv install --dev` and you're good to go.
 
 ## deployment
 
-You can use [the prebuilt Docker image](https://hub.docker.com/r/ytvwld/telemete) or build it yourself.
+You can use [the prebuilt Docker image](https://hub.docker.com/r/chaosdorf/telemete) or build it yourself.
 
 ## configuration
 
