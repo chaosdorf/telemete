@@ -1,6 +1,7 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, InlineQueryHandler, CallbackQueryHandler
 from telegram import InlineQueryResultArticle, InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from raven import Client as RavenClient
+from jinja2 import Environment, FileSystemLoader
 from math import sqrt
 import requests
 import json
@@ -30,6 +31,7 @@ except KeyError:
 
 config = toml.load(environ["CONFIG_FILE"])
 BASE_URL = config['mete_connection']['base_url']
+jinja_env = Environment(loader=FileSystemLoader("templates"))
 updater = Updater(token=API_KEY, use_context=True)
 dispatcher = updater.dispatcher
 raven_client = RavenClient(SENTRY_DSN) if SENTRY_DSN else None
@@ -75,42 +77,35 @@ def commandStart(update, context): # Startup and help message
     bot_name = context.bot.first_name
     if not context.bot.last_name is None:
         bot_name += context.bot.last_name
-    output = "*Welcome to the {} UI!*\n".format(bot_name)
+    
+    database = sqlite3.connect("data/user_links")
+    cursor = database.cursor()
     if mete_id is None:
-        output += "You are currently not linked with a mete account. Please contact one of the administrators:\n"
-        database = sqlite3.connect("data/user_links")
-        cursor = database.cursor()
         cursor.execute('''SELECT user_handle FROM users WHERE admin=1''')
         admin_handles = cursor.fetchall()
-        cursor.close()
-        for u in admin_handles:
-            output += "@{}\n".format(u[0])
-        output += "Please have your mete ID ready to speed up the process."
-        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup, parse_mode=ParseMode.MARKDOWN)
+        admin = None
+        reply_markup = kb_newusers_markup
     else:
-        output += "\nJust press one of the buttons below to buy a drink!\n\n"
-        output += "/balance shows your account balance.\n\n"
-        output += "/help displays this message.\n\n"
-        output += "You can also send a list of buttons for drink buying to any user you want.\n"
-        output += "Simply open their chat and type _@{}_ and click on 'Send drink buttons'.\n".format(context.bot.username)
-        output += "The buttons won't disappear, so you can use them as many times as you'd like.\n"
-        output += "The account of the person clicking on the button will be charged for the purchase."
-
-        database = sqlite3.connect("data/user_links")
-        cursor = database.cursor()
         cursor.execute('''SELECT admin FROM users WHERE mete_id=?''', (mete_id, ))
         admin = cursor.fetchone()[0]
-        cursor.close()
-
-        if admin:
-            output += "\n\n*Admin only:*\n\n"
-            output += "You can link users via inline-mode.\n"
-            output += "Open the user's chat. Then type _@{} link mete-id_ where mete-id is the other user's mete ID you wish to link.\n".format(context.bot.username)
-            output += "Click on 'Send link request'. The other user then presses the button 'Link accounts'.\n\n"
-            output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(context.bot.username)
-
-        output += f"\n\nThis bot is running telemete [{git.revision}](https://github.com/chaosdorf/telemete/tree/{git.revision})."
-        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+        admin_handles = None
+        reply_markup = getDefaultKeyboardMarkup()
+    cursor.close()
+    
+    output = jinja_env.get_template("start.j2").render(
+        bot_name=bot_name,
+        bot_nick=context.bot.username,
+        git_revision=git.revision,
+        admin_handles=admin_handles,
+        mete_id=mete_id,
+        admin=admin,
+    )
+    context.bot.sendMessage(
+        chat_id=update.message.chat_id,
+        text=output,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
 
 @record_exception
