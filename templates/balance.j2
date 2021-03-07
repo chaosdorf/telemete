@@ -1,0 +1,7 @@
+{% if product -%}
+You purchased _{{ product }}_.
+{%- endif %}
+Your {{ "new " if product }}balance is _{{ "{:.2f}".format(balance) }}€_
+{% if balance < 0 %}
+*Your account balance is negative.*
+{% endif %}

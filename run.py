@@ -116,9 +116,7 @@ def commandBalance(update, context): # Display current balance of user
         context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         balance = getBalance(mete_id)
-        output = "Your balance is _{:.2f}€_".format(balance)
-        if balance < 0: # Alert for negative account balance
-            output += "\n\n*Your account balance is negative.*"
+        output = jinja_env.get_template("balance.j2").render(balance=balance)
         context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 
@@ -308,9 +306,10 @@ def handle_textinput(update, context): # Handle any non-command text input to th
             # Buy a drink via http request
             requests.get("{}/api/v1/users/{}/buy?drink={}".format(BASE_URL, mete_id, drink_id))
             balance = getBalance(mete_id)
-            output = "You purchased _{}_. Your new balance is _{:.2f}€_".format(name, balance)
-            if balance < 0: # Alert for negative account balance
-                output += "\n\n*Your account balance is negative.*"
+            output = jinja_env.get_template("balance.j2").render(
+                product=name,
+                balance=balance,
+            )
             context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
             return
     output = "Your input confused me. Get some /help"
