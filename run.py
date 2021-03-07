@@ -30,7 +30,7 @@ except KeyError:
 
 config = toml.load(environ["CONFIG_FILE"])
 BASE_URL = config['mete_connection']['base_url']
-updater = Updater(token=API_KEY)
+updater = Updater(token=API_KEY, use_context=True)
 dispatcher = updater.dispatcher
 raven_client = RavenClient(SENTRY_DSN) if SENTRY_DSN else None
 database = sqlite3.connect("data/user_links")
@@ -54,9 +54,9 @@ kb_newusers = [[KeyboardButton("/start"), KeyboardButton("/list")]]
 kb_newusers_markup = ReplyKeyboardMarkup(kb_newusers, resize_keyboard=True)
 
 def record_exception(old_func):
-    def new_func(bot, update):
+    def new_func(update, context):
         try:
-            old_func(bot, update)
+            old_func(update, context)
         except:  # noqa
             ident = None
             try:
@@ -65,16 +65,16 @@ def record_exception(old_func):
                 output = "Sorry, the bot crashed."
                 if ident:
                     output += f"\nThis issue has been logged with the id {ident}."
-                bot.sendMessage(chat_id=update.message.chat_id, text=output)
+                context.bot.sendMessage(chat_id=update.message.chat_id, text=output)
     return new_func
 
 
 @record_exception
-def commandStart(bot, update): # Startup and help message
+def commandStart(update, context): # Startup and help message
     mete_id = getMeteID(update.message.chat_id)
-    bot_name = bot.first_name
-    if not bot.last_name is None:
-        bot_name += bot.last_name
+    bot_name = context.bot.first_name
+    if not context.bot.last_name is None:
+        bot_name += context.bot.last_name
     output = "*Welcome to the {} UI!*\n".format(bot_name)
     if mete_id is None:
         output += "You are currently not linked with a mete account. Please contact one of the administrators:\n"
@@ -86,13 +86,13 @@ def commandStart(bot, update): # Startup and help message
         for u in admin_handles:
             output += "@{}\n".format(u[0])
         output += "Please have your mete ID ready to speed up the process."
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup, parse_mode=ParseMode.MARKDOWN)
+        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup, parse_mode=ParseMode.MARKDOWN)
     else:
         output += "\nJust press one of the buttons below to buy a drink!\n\n"
         output += "/balance shows your account balance.\n\n"
         output += "/help displays this message.\n\n"
         output += "You can also send a list of buttons for drink buying to any user you want.\n"
-        output += "Simply open their chat and type _@{}_ and click on 'Send drink buttons'.\n".format(bot.username)
+        output += "Simply open their chat and type _@{}_ and click on 'Send drink buttons'.\n".format(context.bot.username)
         output += "The buttons won't disappear, so you can use them as many times as you'd like.\n"
         output += "The account of the person clicking on the button will be charged for the purchase."
 
@@ -105,41 +105,41 @@ def commandStart(bot, update): # Startup and help message
         if admin:
             output += "\n\n*Admin only:*\n\n"
             output += "You can link users via inline-mode.\n"
-            output += "Open the user's chat. Then type _@{} link mete-id_ where mete-id is the other user's mete ID you wish to link.\n".format(bot.username)
+            output += "Open the user's chat. Then type _@{} link mete-id_ where mete-id is the other user's mete ID you wish to link.\n".format(context.bot.username)
             output += "Click on 'Send link request'. The other user then presses the button 'Link accounts'.\n\n"
-            output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(bot.username)
+            output += "User promotion works the same way. Type _@{} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.".format(context.bot.username)
 
         output += f"\n\nThis bot is running telemete [{git.revision}](https://github.com/chaosdorf/telemete/tree/{git.revision})."
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 
 @record_exception
-def commandBalance(bot, update): # Display current balance of user
+def commandBalance(update, context): # Display current balance of user
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
+        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         balance = getBalance(mete_id)
         output = "Your balance is _{:.2f}€_".format(balance)
         if balance < 0: # Alert for negative account balance
             output += "\n\n*Your account balance is negative.*"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 
 @record_exception
-def commandCancel(bot, update): # Cancel action and return to standard button layout
+def commandCancel(update, context): # Cancel action and return to standard button layout
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
+        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         output = "This request has been cancelled."
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup())
+        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup())
 
 
 @record_exception
-def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
+def handle_inlinerequest(update, context): # Handle any inline requests to this bot
     query = update.inline_query
     sender_id = query.from_user.id
     database = sqlite3.connect("data/user_links")
@@ -194,12 +194,12 @@ def handle_inlinerequest(bot, update): # Handle any inline requests to this bot
         results.append(InlineQueryResultArticle(id="0", title="Send promotion request", input_message_content=InputTextMessageContent(output), reply_markup=kb_admin_requests_markup))
     else:
         results.append(InlineQueryResultArticle(id="0", title="Send drink buttons", input_message_content=InputTextMessageContent("Please press one of the buttons below to buy a drink."), reply_markup=getDrinkInlineKeyboardMarkup()))
-    bot.answer_inline_query(query.id, results, cache_time=0)
+    context.bot.answer_inline_query(query.id, results, cache_time=0)
     cursor.close()
 
 
 @record_exception
-def handle_buttonpress(bot, update): # Handle any inline buttonpresses related to this bot
+def handle_buttonpress(update, context): # Handle any inline buttonpresses related to this bot
     query = update.callback_query
     data = query.data.split("/")
     current_keyboard = None
@@ -283,16 +283,16 @@ def handle_buttonpress(bot, update): # Handle any inline buttonpresses related t
         current_keyboard = getDrinkInlineKeyboardMarkup()
     except ValueError:
         pass
-    bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN, reply_markup=current_keyboard)
-    bot.answer_callback_query(query.id, text=answer)
+    context.bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN, reply_markup=current_keyboard)
+    context.bot.answer_callback_query(query.id, text=answer)
 
 
 @record_exception
-def handle_textinput(bot, update): # Handle any non-command text input to this bot
+def handle_textinput(update, context): # Handle any non-command text input to this bot
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
-        bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup, parse_mode=ParseMode.MARKDOWN)
+        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup, parse_mode=ParseMode.MARKDOWN)
         return
     input = update.message.text
     splitup_input = input.split(":")
@@ -316,10 +316,10 @@ def handle_textinput(bot, update): # Handle any non-command text input to this b
             output = "You purchased _{}_. Your new balance is _{:.2f}€_".format(name, balance)
             if balance < 0: # Alert for negative account balance
                 output += "\n\n*Your account balance is negative.*"
-            bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+            context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
             return
     output = "Your input confused me. Get some /help"
-    bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+    context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 def getMeteID(telegram_id): # Returns the mete id linked to the specified telegram id or None, if there is no link
     database = sqlite3.connect("data/user_links")
