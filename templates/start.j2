@@ -1,0 +1,29 @@
+*Welcome to the {{ bot_name }} UI!*
+{% if not mete_id %}
+You are currently not linked with a mete account. Please contact one of the administrators:
+{% for u in admin_handles %}
+@{{ u[0] }}
+{% endfor %}
+Please have your mete ID ready to speed up the process.
+{% else %}
+Just press one of the buttons below to buy a drink!
+
+/balance shows your account balance.
+
+/help displays this message.
+
+You can also send a list of buttons for drink buying to any user you want.
+Simply open their chat and type _@{{ bot_nick }}_ and click on 'Send drink buttons'.
+The buttons won't disappear, so you can use them as many times as you'd like.
+The account of the person clicking on the button will be charged for the purchase.
+{% if admin %}
+*Admin only:*
+
+You can link users via inline-mode.
+Open the user's chat. Then type _@{{ bot_nick }} link mete-id_ where mete-id is the other user's mete ID you wish to link.
+Click on 'Send link request'. The other user then presses the button 'Link accounts'.
+
+User promotion works the same way. Type _@{{ bot_nick }} promote_ and click on 'Send promotion request'. The other user then presses the button 'Become administrator'.
+{% endif %}
+This bot is running telemete [{{ git_revision }}](https://github.com/chaosdorf/telemete/tree/{{ git_revision }}).
+{% endif %}

@@ -9,6 +9,7 @@ python-telegram-bot = "*"
 raven = "*"
 toml = "*"
 dealer = "*"
+jinja2 = "*"
 
 [dev-packages]
 python-language-server = {extras = ["all"], version = "*"}
