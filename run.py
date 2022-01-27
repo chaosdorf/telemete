@@ -1,6 +1,6 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, InlineQueryHandler, CallbackQueryHandler
 from telegram import InlineQueryResultArticle, InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
-from raven import Client as RavenClient
+import sentry_sdk
 from jinja2 import Environment, FileSystemLoader
 from math import sqrt
 import requests
@@ -10,6 +10,7 @@ import toml
 from dealer.git import git
 from os import environ
 from pathlib import Path
+from traceback import print_exc
 
 # please see the README for configuration options
 
@@ -34,7 +35,8 @@ BASE_URL = config['mete_connection']['base_url']
 jinja_env = Environment(loader=FileSystemLoader("templates"))
 updater = Updater(token=API_KEY, use_context=True)
 dispatcher = updater.dispatcher
-raven_client = RavenClient(SENTRY_DSN) if SENTRY_DSN else None
+if SENTRY_DSN:
+    sentry_sdk.init(SENTRY_DSN)
 database = sqlite3.connect("data/user_links")
 cursor = database.cursor()
 
@@ -59,14 +61,15 @@ def record_exception(old_func):
     def new_func(update, context):
         try:
             old_func(update, context)
-        except:  # noqa
+        except Exception as e:  # noqa
             ident = None
+            output = "Sorry, the bot crashed."
+            print_exc()
             try:
-                ident = raven_client.get_ident(raven_client.captureException())
+                if SENTRY_DSN:
+                    sentry_sdk.capture_exception(e)
+                    output += "\nThis issue has been logged."
             finally:
-                output = "Sorry, the bot crashed."
-                if ident:
-                    output += f"\nThis issue has been logged with the id {ident}."
                 context.bot.sendMessage(chat_id=update.message.chat_id, text=output)
     return new_func
 

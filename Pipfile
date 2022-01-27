@@ -6,10 +6,10 @@ name = "pypi"
 [packages]
 requests = "*"
 python-telegram-bot = "*"
-raven = "*"
 toml = "*"
 dealer = "*"
 jinja2 = "*"
+sentry-sdk = "*"
 
 [dev-packages]
 python-language-server = {extras = ["all"], version = "*"}
