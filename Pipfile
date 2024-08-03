@@ -12,7 +12,6 @@ jinja2 = "*"
 sentry-sdk = "*"
 
 [dev-packages]
-python-language-server = {extras = ["all"], version = "*"}
 mypy = "*"
 
 [requires]
