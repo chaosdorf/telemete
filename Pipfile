@@ -5,7 +5,7 @@ name = "pypi"
 
 [packages]
 requests = "*"
-python-telegram-bot = "*"
+python-telegram-bot = "<14"
 toml = "*"
 dealer = "*"
 jinja2 = "*"
@@ -16,4 +16,4 @@ python-language-server = {extras = ["all"], version = "*"}
 mypy = "*"
 
 [requires]
-python_version = "3.8"
+python_version = "3.10"
