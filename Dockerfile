@@ -1,4 +1,4 @@
-FROM python:3.10-alpine
+FROM python:3.11-alpine
 RUN pip install --no-cache-dir pipenv
 RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev git
 
