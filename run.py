@@ -1,8 +1,8 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, InlineQueryHandler, CallbackQueryHandler
-from telegram import InlineQueryResultArticle, InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
+from telegram.ext import filters, Application, CallbackQueryHandler, CommandHandler, InlineQueryHandler, MessageHandler
+from telegram.constants import ParseMode
+from telegram import InlineQueryResultArticle, InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 import sentry_sdk
 from jinja2 import Environment, FileSystemLoader
-from math import sqrt
 import requests
 import json
 import sqlite3
@@ -33,8 +33,7 @@ except KeyError:
 config = toml.load(environ["CONFIG_FILE"])
 BASE_URL = config['mete_connection']['base_url']
 jinja_env = Environment(loader=FileSystemLoader("templates"))
-updater = Updater(token=API_KEY, use_context=True)
-dispatcher = updater.dispatcher
+application = Application.builder().token(API_KEY).build()
 if SENTRY_DSN:
     sentry_sdk.init(SENTRY_DSN)
 database = sqlite3.connect("data/user_links")
@@ -58,9 +57,9 @@ kb_newusers = [[KeyboardButton("/start"), KeyboardButton("/list")]]
 kb_newusers_markup = ReplyKeyboardMarkup(kb_newusers, resize_keyboard=True)
 
 def record_exception(old_func):
-    def new_func(update, context):
+    async def new_func(update, context):
         try:
-            old_func(update, context)
+            await old_func(update, context)
         except Exception as e:  # noqa
             ident = None
             output = "Sorry, the bot crashed."
@@ -70,12 +69,12 @@ def record_exception(old_func):
                     sentry_sdk.capture_exception(e)
                     output += "\nThis issue has been logged."
             finally:
-                context.bot.sendMessage(chat_id=update.message.chat_id, text=output)
+                await context.bot.sendMessage(chat_id=update.message.chat_id, text=output)
     return new_func
 
 
 @record_exception
-def commandStart(update, context): # Startup and help message
+async def commandStart(update, context): # Startup and help message
     mete_id = getMeteID(update.message.chat_id)
     bot_name = context.bot.first_name
     if not context.bot.last_name is None:
@@ -103,7 +102,7 @@ def commandStart(update, context): # Startup and help message
         mete_id=mete_id,
         admin=admin,
     )
-    context.bot.sendMessage(
+    await context.bot.sendMessage(
         chat_id=update.message.chat_id,
         text=output,
         reply_markup=reply_markup,
@@ -112,30 +111,30 @@ def commandStart(update, context): # Startup and help message
 
 
 @record_exception
-def commandBalance(update, context): # Display current balance of user
+async def commandBalance(update, context): # Display current balance of user
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
-        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
+        await context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         balance = getBalance(mete_id)
         output = jinja_env.get_template("balance.j2").render(balance=balance)
-        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+        await context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 
 @record_exception
-def commandCancel(update, context): # Cancel action and return to standard button layout
+async def commandCancel(update, context): # Cancel action and return to standard button layout
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
-        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
+        await context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=kb_newusers_markup)
     else:
         output = "This request has been cancelled."
-        context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup())
+        await context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup())
 
 
 @record_exception
-def handle_inlinerequest(update, context): # Handle any inline requests to this bot
+async def handle_inlinerequest(update, context): # Handle any inline requests to this bot
     query = update.inline_query
     sender_id = query.from_user.id
     database = sqlite3.connect("data/user_links")
@@ -190,12 +189,12 @@ def handle_inlinerequest(update, context): # Handle any inline requests to this 
         results.append(InlineQueryResultArticle(id="0", title="Send promotion request", input_message_content=InputTextMessageContent(output), reply_markup=kb_admin_requests_markup))
     else:
         results.append(InlineQueryResultArticle(id="0", title="Send drink buttons", input_message_content=InputTextMessageContent("Please press one of the buttons below to buy a drink."), reply_markup=getDrinkInlineKeyboardMarkup()))
-    context.bot.answer_inline_query(query.id, results, cache_time=0)
+    await context.bot.answer_inline_query(query.id, results, cache_time=0)
     cursor.close()
 
 
 @record_exception
-def handle_buttonpress(update, context): # Handle any inline buttonpresses related to this bot
+async def handle_buttonpress(update, context): # Handle any inline buttonpresses related to this bot
     query = update.callback_query
     data = query.data.split("/")
     current_keyboard = None
@@ -279,12 +278,12 @@ def handle_buttonpress(update, context): # Handle any inline buttonpresses relat
         current_keyboard = getDrinkInlineKeyboardMarkup()
     except ValueError:
         pass
-    context.bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN, reply_markup=current_keyboard)
-    context.bot.answer_callback_query(query.id, text=answer)
+    await context.bot.edit_message_text(output, inline_message_id=query.inline_message_id, parse_mode=ParseMode.MARKDOWN, reply_markup=current_keyboard)
+    await context.bot.answer_callback_query(query.id, text=answer)
 
 
 @record_exception
-def handle_textinput(update, context): # Handle any non-command text input to this bot
+async def handle_textinput(update, context): # Handle any non-command text input to this bot
     mete_id = getMeteID(update.message.chat_id)
     if mete_id is None:
         output = "You are not linked to a mete account!"
@@ -313,10 +312,10 @@ def handle_textinput(update, context): # Handle any non-command text input to th
                 product=name,
                 balance=balance,
             )
-            context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+            await context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
             return
     output = "Your input confused me. Get some /help"
-    context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
+    await context.bot.sendMessage(chat_id=update.message.chat_id, text=output, reply_markup=getDefaultKeyboardMarkup(), parse_mode=ParseMode.MARKDOWN)
 
 def getMeteID(telegram_id): # Returns the mete id linked to the specified telegram id or None, if there is no link
     database = sqlite3.connect("data/user_links")
@@ -377,16 +376,14 @@ def getDrinkInlineKeyboardMarkup(): # Returns a keyboard containing buttons for 
     kb_default_markup = InlineKeyboardMarkup(kb_default)
     return kb_default_markup
 
-dispatcher.add_handler(CommandHandler('start', commandStart))
-dispatcher.add_handler(CommandHandler('help', commandStart))
-dispatcher.add_handler(CommandHandler('balance', commandBalance))
-dispatcher.add_handler(CommandHandler('cancel', commandCancel))
-dispatcher.add_handler(InlineQueryHandler(handle_inlinerequest))
-dispatcher.add_handler(CallbackQueryHandler(handle_buttonpress))
-dispatcher.add_handler(MessageHandler(Filters.text, handle_textinput))
+application.add_handler(CommandHandler('start', commandStart))
+application.add_handler(CommandHandler('help', commandStart))
+application.add_handler(CommandHandler('balance', commandBalance))
+application.add_handler(CommandHandler('cancel', commandCancel))
+application.add_handler(InlineQueryHandler(handle_inlinerequest))
+application.add_handler(CallbackQueryHandler(handle_buttonpress))
+application.add_handler(MessageHandler(filters.TEXT, handle_textinput))
 
-updater.start_polling()
-
-updater.idle()
+application.run_polling()
 
 database.close()

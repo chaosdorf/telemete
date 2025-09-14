@@ -5,7 +5,7 @@ name = "pypi"
 
 [packages]
 requests = "*"
-python-telegram-bot = "<14"
+python-telegram-bot = "<21"
 toml = "*"
 dealer = "*"
 jinja2 = "*"
